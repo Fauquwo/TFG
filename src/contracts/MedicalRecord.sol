@@ -21,6 +21,7 @@ contract MedicalRecord {
     mapping(address => Record[]) public patientRecords;
     // Mapeo para almacenar la lista de doctores aprobados
     mapping(address => bool) public doctors;
+    mapping(address => bool) public patients;
     // Matriz para almacenar todas las solicitudes de citas
     Appointment[] public appointments;
 
@@ -34,12 +35,19 @@ contract MedicalRecord {
         require(doctors[msg.sender] == true, "Only doctors can perform this action");
         _;
     }
-
+    
+    modifier onlyPatient() {
+        require(patients[msg.sender] == true, "Only patients can perform this action");
+        _;
+    }
     // Función para agregar un nuevo doctor a la lista de aprobados
     function addDoctor(address _doctor) public {
         doctors[_doctor] = true;
     }
-
+    
+    function addPatient(address _patient) public {
+        patients[_patient] = true;
+    }
     // Función para que los doctores agreguen un registro médico para un paciente
     function addRecord(address _patient, string memory _ipfsHash) public onlyDoctor {
         patientRecords[_patient].push(Record(_ipfsHash, msg.sender, block.timestamp));
@@ -52,7 +60,7 @@ contract MedicalRecord {
     }
 
     // Función para que los pacientes soliciten una cita con un doctor
-    function requestAppointment(address _doctor, uint _timestamp) public {
+    function requestAppointment(address _doctor, uint _timestamp) public onlyPatient{
         require(doctors[_doctor], "Invalid doctor address");
         appointments.push(Appointment(msg.sender, _doctor, _timestamp, false));
         emit AppointmentRequested(msg.sender, _doctor, _timestamp);
