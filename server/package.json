@@ -1,20 +1,22 @@
 {
   "name": "server",
   "version": "1.0.0",
-  "main": "server.js",
+  "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node server.js"
   },
+  "type": "module",
   "keywords": [],
   "author": "",
   "license": "ISC",
   "description": "",
-  "type": "module",
   "dependencies": {
+    "axios": "^1.7.3",
+    "body-parser": "^1.20.2",
+    "cors": "^2.8.5",
     "express": "^4.19.2",
-    "ipfs": "^0.66.1",
-    "ipfs-http-client": "^60.0.1",
-    "web3": "^4.9.0"
+    "ipfs-http-client": "^56.0.1",
+    "multer": "^1.4.5-lts.1"
   }
 }

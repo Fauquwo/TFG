@@ -1,105 +1,212 @@
 import React, { useState, useEffect } from 'react';
 import Web3 from 'web3';
+import detectEthereumProvider from '@metamask/detect-provider';
+import axios from 'axios';
 import MedicalRecord from './abis/MedicalRecord.json';
-import Home from './components/Home';
-import AddRecord from './components/AddRecord';
-import RequestAppointment from './components/RequestAppointment';
-import RecordList from './components/RecordList';
-import AppointmentList from './components/AppointmentList';
-import './App.css';
+import Header from './Header';
+import Register from './Register';
+import DoctorDashboard from './DoctorDashboard';
+import PatientDashboard from './PatientDashboard';
 
 const App = () => {
   const [account, setAccount] = useState('');
   const [contract, setContract] = useState(null);
-  const [patientRecords, setPatientRecords] = useState([]);
-  const [appointments, setAppointments] = useState([]);
+  const [web3, setWeb3] = useState(null);
   const [role, setRole] = useState('');
-  const [view, setView] = useState('home');
+  const [appointments, setAppointments] = useState([]);
+  const [patientAppointments, setPatientAppointments] = useState([]);
+  const [records, setRecords] = useState([]);
 
   useEffect(() => {
-    const loadBlockchainData = async () => {
-      const web3 = new Web3(Web3.givenProvider || 'http://localhost:7545');
-      const accounts = await web3.eth.requestAccounts();
-      setAccount(accounts[0]);
-
-      const networkId = await web3.eth.net.getId();
-      const networkData = MedicalRecord.networks[networkId];
-      if (networkData) {
-        const contract = new web3.eth.Contract(MedicalRecord.abi, networkData.address);
-        setContract(contract);
-        const isDoctor = await contract.methods.doctors(accounts[0]).call();
-        const isPatient = await contract.methods.patients(accounts[0]).call();
-        if (isDoctor) {
-          setRole('doctor');
-          setView('doctor');
-        } else if (isPatient) {
-          setRole('patient');
-          setView('patient');
-        } else {
-          setView('home');
-        }
-      } else {
-        alert('Smart contract not deployed to detected network.');
-      }
-    };
-
     loadBlockchainData();
   }, []);
 
-  const handleRegister = async (address, role) => {
-    if (role === 'doctor') {
-      await contract.methods.addDoctor(address).send({ from: account });
-    } else if (role === 'patient') {
-      await contract.methods.addPatient(address).send({ from: account });
+  const loadBlockchainData = async () => {
+    const provider = await detectEthereumProvider();
+
+    if (provider) {
+      const web3 = new Web3(provider);
+      setWeb3(web3);
+
+      if (provider.request) {
+        try {
+          console.log('Requesting accounts...');
+          await provider.request({ method: 'eth_requestAccounts' });
+        } catch (error) {
+          console.error('User denied account access');
+          return;
+        }
+      }
+
+      const accounts = await web3.eth.getAccounts();
+      console.log('Accounts:', accounts);
+      setAccount(accounts[0]);
+
+      const networkId = await web3.eth.net.getId();
+      console.log('Network ID:', networkId);
+      const networkData = MedicalRecord.networks[networkId];
+
+      if (networkData) {
+        const contract = new web3.eth.Contract(MedicalRecord.abi, networkData.address);
+        console.log('Contract:', contract);
+        setContract(contract);
+
+        try {
+          const isDoctor = await contract.methods.doctors(accounts[0]).call();
+          console.log('Is Doctor:', isDoctor);
+          const isPatient = await contract.methods.patients(accounts[0]).call();
+          console.log('Is Patient:', isPatient);
+
+          if (isDoctor) {
+            setRole('doctor');
+            fetchAllAppointments(contract, accounts[0], 'doctor');
+          } else if (isPatient) {
+            setRole('patient');
+            fetchAllAppointments(contract, accounts[0], 'patient');
+            const records = await contract.methods.getRecords(accounts[0]).call();
+            setRecords(records);
+          }
+        } catch (error) {
+          console.error('Error checking roles or loading data:', error);
+        }
+      } else {
+        console.error('Smart contract not deployed to detected network.');
+        window.alert('Smart contract not deployed to detected network.');
+      }
+    } else {
+      console.error('Please install MetaMask!');
+      window.alert('Please install MetaMask!');
     }
-    setRole(role);
-    setView(role);
   };
 
-  const handleRecordAdded = (newRecord) => {
-    setPatientRecords([...patientRecords, newRecord]);
+  const fetchAllAppointments = async (contract, address, role) => {
+    try {
+      const allAppointments = await contract.methods.getAppointments().call();
+      if (role === 'doctor') {
+        const doctorAppointments = allAppointments.filter(appointment => appointment.doctor === address);
+        setAppointments(doctorAppointments);
+        console.log('Doctor Appointments:', doctorAppointments);
+      } else if (role === 'patient') {
+        const patientAppointments = allAppointments.filter(appointment => appointment.patient === address);
+        setPatientAppointments(patientAppointments);
+        console.log('Patient Appointments:', patientAppointments);
+      }
+    } catch (error) {
+      console.error('Failed to fetch appointments:', error);
+    }
   };
 
-  const handleAppointmentRequested = (newAppointment) => {
-    setAppointments([...appointments, newAppointment]);
+  const handleRegister = async (address, role) => {
+    if (!contract) {
+      console.error('Contract is not loaded');
+      return;
+    }
+
+    try {
+      const response = await axios.post('http://localhost:5000/register', { address, role });
+      console.log('Registration data uploaded to IPFS:', response.data);
+
+      if (role === 'doctor') {
+        await contract.methods.addDoctor(address).send({ from: account });
+      } else if (role === 'patient') {
+        await contract.methods.addPatient(address).send({ from: account });
+      }
+    } catch (error) {
+      console.error(`Failed to register ${address} as ${role}:`, error);
+    }
   };
 
-  const handleAppointmentConfirmed = (appointmentId) => {
-    const updatedAppointments = appointments.map((appt, index) =>
-      index === appointmentId ? { ...appt, confirmed: true } : appt
-    );
-    setAppointments(updatedAppointments);
+  const handleAddRecord = async (patientAddress, fileHash, timestamp) => {
+    if (!contract) {
+      console.error('Contract is not loaded');
+      return;
+    }
+
+    try {
+      if (!web3.utils.isAddress(patientAddress)) {
+        throw new Error('Invalid patient address');
+      }
+
+      if (!fileHash || typeof fileHash !== 'string') {
+        throw new Error('Invalid IPFS hash');
+      }
+
+      await contract.methods.addRecord(patientAddress, fileHash, timestamp).send({ from: account });
+
+      const records = await contract.methods.getRecords(patientAddress).call();
+      setRecords(records);
+    } catch (error) {
+      console.error('Failed to add record:', error.message);
+    }
   };
 
-  const renderView = () => {
-    switch (view) {
-      case 'patient':
-        return (
-          <>
-            <RequestAppointment contract={contract} account={account} onAppointmentRequested={handleAppointmentRequested} />
-            <AppointmentList
-              appointments={appointments}
-              contract={contract}
-              account={account}
-              onAppointmentConfirmed={handleAppointmentConfirmed}
-            />
-          </>
-        );
-      case 'doctor':
-        return (
-          <>
-            <AddRecord contract={contract} account={account} onRecordAdded={handleRecordAdded} />
-            <RecordList records={patientRecords} />
-          </>
-        );
-      default:
-        return <Home onRegister={handleRegister} />;
+  const handleRequestAppointment = async (doctorAddress, timestamp) => {
+    if (!contract) {
+      console.error('Contract is not loaded');
+      return;
+    }
+
+    try {
+      const response = await axios.post('http://localhost:5000/appointment', { doctorAddress, patientAddress: account, timestamp });
+      console.log('Appointment data uploaded to IPFS:', response.data);
+
+      await contract.methods.requestAppointment(doctorAddress, timestamp.toString()).send({ from: account });
+      fetchAllAppointments(contract, account, 'patient');
+    } catch (error) {
+      console.error('Failed to request appointment:', error);
+    }
+  };
+
+  const handleConfirmAppointment = async (appointmentId) => {
+    if (!contract) {
+      console.error('Contract is not loaded');
+      return;
+    }
+
+    try {
+      await contract.methods.confirmAppointment(appointmentId).send({ from: account });
+      fetchAllAppointments(contract, account, role);
+    } catch (error) {
+      console.error('Failed to confirm appointment:', error);
+    }
+  };
+
+  const fetchRecords = async (patientAddress) => {
+    if (!contract) {
+      console.error('Contract is not loaded');
+      return;
+    }
+
+    try {
+      const records = await contract.methods.getRecords(patientAddress).call();
+      setRecords(records);
+    } catch (error) {
+      console.error('Failed to fetch records:', error);
     }
   };
 
   return (
-    <div className="app">
-      {renderView()}
+    <div>
+      <Header account={account} />
+      <div style={{ padding: '20px' }}>
+        <Register account={account} handleRegister={handleRegister} />
+        {role === 'doctor' && (
+          <DoctorDashboard
+            appointments={appointments}
+            handleConfirmAppointment={handleConfirmAppointment}
+            handleAddRecord={handleAddRecord}
+            fetchRecords={fetchRecords}
+            records={records}
+          />
+        )}
+        {role === 'patient' && (
+          <PatientDashboard
+            handleRequestAppointment={handleRequestAppointment}
+            patientAppointments={patientAppointments}
+            records={records}
+          />
+        )}
+      </div>
     </div>
   );
 };
