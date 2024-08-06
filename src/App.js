@@ -103,43 +103,42 @@ const App = () => {
     }
 
     try {
-      const response = await axios.post('http://localhost:5000/register', { address, role });
-      console.log('Registration data uploaded to IPFS:', response.data);
-
       if (role === 'doctor') {
         await contract.methods.addDoctor(address).send({ from: account });
       } else if (role === 'patient') {
         await contract.methods.addPatient(address).send({ from: account });
       }
+      
+      setRole(role);
     } catch (error) {
       console.error(`Failed to register ${address} as ${role}:`, error);
     }
   };
-
-  const handleAddRecord = async (patientAddress, fileHash, timestamp) => {
+  
+  const handleAddRecord = async (patientAddress, fileHash, timestamp, mimetype) => {
     if (!contract) {
       console.error('Contract is not loaded');
       return;
     }
-
+  
     try {
       if (!web3.utils.isAddress(patientAddress)) {
         throw new Error('Invalid patient address');
       }
-
+  
       if (!fileHash || typeof fileHash !== 'string') {
         throw new Error('Invalid IPFS hash');
       }
-
-      await contract.methods.addRecord(patientAddress, fileHash, timestamp).send({ from: account });
-
+  
+      await contract.methods.addRecord(patientAddress, fileHash, timestamp, mimetype).send({ from: account });
+  
       const records = await contract.methods.getRecords(patientAddress).call();
       setRecords(records);
     } catch (error) {
       console.error('Failed to add record:', error.message);
     }
   };
-
+  
   const handleRequestAppointment = async (doctorAddress, timestamp) => {
     if (!contract) {
       console.error('Contract is not loaded');
@@ -189,7 +188,7 @@ const App = () => {
     <div>
       <Header account={account} />
       <div style={{ padding: '20px' }}>
-        <Register account={account} handleRegister={handleRegister} />
+        {!role && <Register account={account} handleRegister={handleRegister} />}
         {role === 'doctor' && (
           <DoctorDashboard
             appointments={appointments}
