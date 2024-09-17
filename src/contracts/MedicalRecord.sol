@@ -18,8 +18,6 @@ contract MedicalRecord {
         bool confirmed;
     }
 
-    string public name;
-
     // Mapeo para almacenar matrices de registros médicos para cada paciente
     mapping(address => Record[]) public patientRecords;
     // Mapeo para almacenar la lista de doctores aprobados

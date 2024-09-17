@@ -6,7 +6,6 @@ import cors from 'cors';
 const app = express();
 const upload = multer();
 
-// 配置 IPFS HTTP 客户端
 const ipfs = create({ host: 'localhost', port: '5001', protocol: 'http' });
 
 app.use(cors());
@@ -19,7 +18,7 @@ app.post('/upload', upload.single('file'), async (req, res) => {
       throw new Error('No file uploaded');
     }
 
-    const currentTime = new Date().toISOString(); // 获取当前时间
+    const currentTime = new Date().toISOString();
 
     console.log('Uploading file to IPFS...');
     const added = await ipfs.add(file.buffer);
@@ -54,6 +53,38 @@ app.get('/download/:hash/:timestamp', async (req, res) => {
   } catch (error) {
     console.error('Error downloading file from IPFS:', error.message);
     res.status(500).send(`Error downloading file from IPFS: ${error.message}`);
+  }
+});
+
+app.post('/register', async (req, res) => {
+  try {
+    const { address, role } = req.body;
+    const registrationData = { address, role, timestamp: new Date().toISOString() };
+
+    console.log('Uploading registration data to IPFS...');
+    const added = await ipfs.add(JSON.stringify(registrationData));
+    console.log('Registration data uploaded to IPFS:', added);
+
+    res.status(200).json({ hash: added.path });
+  } catch (error) {
+    console.error('Error uploading registration data to IPFS:', error.message);
+    res.status(500).send(`Error uploading registration data to IPFS: ${error.message}`);
+  }
+});
+
+app.post('/appointment', async (req, res) => {
+  try {
+    const { doctorAddress, patientAddress, timestamp } = req.body;
+    const appointmentData = { doctorAddress, patientAddress, timestamp, created_at: new Date().toISOString() };
+
+    console.log('Uploading appointment data to IPFS...');
+    const added = await ipfs.add(JSON.stringify(appointmentData));
+    console.log('Appointment data uploaded to IPFS:', added);
+
+    res.status(200).json({ hash: added.path });
+  } catch (error) {
+    console.error('Error uploading appointment data to IPFS:', error.message);
+    res.status(500).send(`Error uploading appointment data to IPFS: ${error.message}`);
   }
 });
 

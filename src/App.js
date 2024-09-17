@@ -30,32 +30,25 @@ const App = () => {
 
       if (provider.request) {
         try {
-          console.log('Requesting accounts...');
           await provider.request({ method: 'eth_requestAccounts' });
         } catch (error) {
-          console.error('User denied account access');
           return;
         }
       }
 
       const accounts = await web3.eth.getAccounts();
-      console.log('Accounts:', accounts);
       setAccount(accounts[0]);
-
+      // Verificación de roles
       const networkId = await web3.eth.net.getId();
-      console.log('Network ID:', networkId);
       const networkData = MedicalRecord.networks[networkId];
 
       if (networkData) {
         const contract = new web3.eth.Contract(MedicalRecord.abi, networkData.address);
-        console.log('Contract:', contract);
         setContract(contract);
 
         try {
           const isDoctor = await contract.methods.doctors(accounts[0]).call();
-          console.log('Is Doctor:', isDoctor);
           const isPatient = await contract.methods.patients(accounts[0]).call();
-          console.log('Is Patient:', isPatient);
 
           if (isDoctor) {
             setRole('doctor');
@@ -67,14 +60,11 @@ const App = () => {
             setRecords(records);
           }
         } catch (error) {
-          console.error('Error checking roles or loading data:', error);
         }
       } else {
-        console.error('Smart contract not deployed to detected network.');
         window.alert('Smart contract not deployed to detected network.');
       }
     } else {
-      console.error('Please install MetaMask!');
       window.alert('Please install MetaMask!');
     }
   };
@@ -85,11 +75,9 @@ const App = () => {
       if (role === 'doctor') {
         const doctorAppointments = allAppointments.filter(appointment => appointment.doctor === address);
         setAppointments(doctorAppointments);
-        console.log('Doctor Appointments:', doctorAppointments);
       } else if (role === 'patient') {
         const patientAppointments = allAppointments.filter(appointment => appointment.patient === address);
         setPatientAppointments(patientAppointments);
-        console.log('Patient Appointments:', patientAppointments);
       }
     } catch (error) {
       console.error('Failed to fetch appointments:', error);
@@ -164,6 +152,7 @@ const App = () => {
 
     try {
       await contract.methods.confirmAppointment(appointmentId).send({ from: account });
+      setAppointments(appointments);
       fetchAllAppointments(contract, account, role);
     } catch (error) {
       console.error('Failed to confirm appointment:', error);
